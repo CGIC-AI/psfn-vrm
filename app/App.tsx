@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   startTransition,
+  type ChangeEvent,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -177,6 +178,7 @@ export function App() {
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [draft, setDraft] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [activeVrmLabel, setActiveVrmLabel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -196,6 +198,8 @@ export function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recorderChunksRef = useRef<Blob[]>([])
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const localVrmInputRef = useRef<HTMLInputElement | null>(null)
+  const localVrmUrlRef = useRef<string | null>(null)
   const pttShortcutActiveRef = useRef(false)
 
   const selectedVrm = useMemo(
@@ -260,6 +264,10 @@ export function App() {
       if (audioContextRef.current) {
         void audioContextRef.current.close()
       }
+      if (localVrmUrlRef.current) {
+        URL.revokeObjectURL(localVrmUrlRef.current)
+        localVrmUrlRef.current = null
+      }
     }
   }, [])
 
@@ -282,17 +290,20 @@ export function App() {
 
   useEffect(() => {
     const fallback = vrmItems[0] ?? null
-    const resolved = selectedVrm ?? fallback
-    if (!resolved) {
+    if (!selectedVrm && fallback && fallback.name !== settings.selectedVrmName) {
+      setSettings((current) => ({ ...current, selectedVrmName: fallback.name }))
+      return
+    }
+    if (!selectedVrm && !fallback) {
       setErrorMessage('No bundled VRMs found.')
       return
     }
-    if (resolved.name !== settings.selectedVrmName) {
-      setSettings((current) => ({ ...current, selectedVrmName: resolved.name }))
-      return
-    }
-    if (avatarUrl !== resolved.url) {
-      setAvatarUrl(resolved.url)
+    if (!avatarUrl) {
+      const initialVrm = selectedVrm ?? fallback
+      if (initialVrm) {
+        setAvatarUrl(initialVrm.url)
+        setActiveVrmLabel(initialVrm.name)
+      }
     }
   }, [avatarUrl, selectedVrm, settings.selectedVrmName, vrmItems])
 
@@ -584,7 +595,41 @@ export function App() {
       setErrorMessage('No VRM is available to load.')
       return
     }
+    if (localVrmUrlRef.current) {
+      URL.revokeObjectURL(localVrmUrlRef.current)
+      localVrmUrlRef.current = null
+    }
     setAvatarUrl(selectedVrm.url)
+    setActiveVrmLabel(selectedVrm.name)
+    setErrorMessage(null)
+    setSettingsOpen(false)
+  })
+
+  const openLocalVrmPicker = useEffectEvent(() => {
+    localVrmInputRef.current?.click()
+  })
+
+  const loadLocalVrm = useEffectEvent((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    if (!file.name.toLowerCase().endsWith('.vrm')) {
+      setErrorMessage('Pick a .vrm file.')
+      return
+    }
+
+    if (localVrmUrlRef.current) {
+      URL.revokeObjectURL(localVrmUrlRef.current)
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+    localVrmUrlRef.current = objectUrl
+    setAvatarUrl(objectUrl)
+    setActiveVrmLabel(file.name)
     setErrorMessage(null)
     setSettingsOpen(false)
   })
@@ -758,14 +803,31 @@ export function App() {
               </select>
             </label>
 
-            <button
-              className="text-button text-button--primary"
-              disabled={!selectedVrm}
-              onClick={() => loadSelectedVrm()}
-              type="button"
-            >
-              Load VRM
-            </button>
+            <div className="settings-button-row">
+              <button
+                className="text-button text-button--primary"
+                disabled={!selectedVrm}
+                onClick={() => loadSelectedVrm()}
+                type="button"
+              >
+                Load Selected
+              </button>
+              <button
+                className="text-button"
+                onClick={() => openLocalVrmPicker()}
+                type="button"
+              >
+                Upload VRM
+              </button>
+            </div>
+            <input
+              accept=".vrm"
+              className="hidden-file-input"
+              onChange={loadLocalVrm}
+              ref={localVrmInputRef}
+              type="file"
+            />
+            {activeVrmLabel ? <div className="settings-status">Loaded: {activeVrmLabel}</div> : null}
 
             <div className="toggle-grid">
               <label className="check-row">
