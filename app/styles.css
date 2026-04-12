@@ -144,8 +144,7 @@ button {
   grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.78);
   backdrop-filter: blur(18px) saturate(0.75);
   -webkit-backdrop-filter: blur(18px) saturate(0.75);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
