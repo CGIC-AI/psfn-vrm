@@ -125,22 +125,51 @@ button {
   left: 50%;
   bottom: 64px;
   z-index: 4;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 8px;
-  width: min(860px, calc(100vw - 24px));
-  height: 25vh;
-  min-height: 150px;
+  width: min(720px, calc(100vw - 24px));
+  height: clamp(152px, 19vh, 220px);
   transform: translateX(-50%);
-  padding: 28px 10px 12px;
   pointer-events: none;
 }
 
 .chat-strip__gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.45) 42%, rgba(0, 0, 0, 0.92) 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.14) 30%, rgba(0, 0, 0, 0.42) 100%);
+}
+
+.chat-strip__panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(0.75);
+  -webkit-backdrop-filter: blur(18px) saturate(0.75);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
+  pointer-events: auto;
+}
+
+.chat-strip__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.26) rgba(255, 255, 255, 0.06);
+}
+
+.chat-strip__scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-strip__scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chat-strip__scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .chat-strip__empty,
@@ -165,8 +194,12 @@ button {
 .chat-line {
   display: grid;
   gap: 2px;
-  padding: 0;
+  padding: 0 0 8px;
   color: #fff;
+}
+
+.chat-line:last-child {
+  padding-bottom: 0;
 }
 
 .chat-line__role {
@@ -358,11 +391,8 @@ button {
 
   .chat-strip {
     bottom: 60px;
-    height: 26vh;
-    min-height: 132px;
+    height: clamp(132px, 23vh, 182px);
     width: calc(100vw - 16px);
-    padding-left: 8px;
-    padding-right: 8px;
   }
 
   .input-dock {

@@ -782,18 +782,22 @@ export function App() {
 
       <section className="chat-strip">
         <div className="chat-strip__gradient" />
-        {visibleMessages.length === 0 ? (
-          <div className="chat-strip__empty">{emptyStateLabel}</div>
-        ) : (
-          visibleMessages.map((message) => (
-            <article className={`chat-line chat-line--${message.role}`} key={message.id}>
-              <span className="chat-line__role">{message.role === 'user' ? 'You' : agentLabel}</span>
-              <p>{message.content}</p>
-            </article>
-          ))
-        )}
-        {pendingIndicator ? <div className="chat-strip__status">{pendingIndicator}</div> : null}
-        {errorMessage ? <div className="chat-strip__error">{errorMessage}</div> : null}
+        <div className="chat-strip__panel">
+          <div className="chat-strip__scroll">
+            {visibleMessages.length === 0 ? (
+              <div className="chat-strip__empty">{emptyStateLabel}</div>
+            ) : (
+              visibleMessages.map((message) => (
+                <article className={`chat-line chat-line--${message.role}`} key={message.id}>
+                  <span className="chat-line__role">{message.role === 'user' ? 'You' : agentLabel}</span>
+                  <p>{message.content}</p>
+                </article>
+              ))
+            )}
+          </div>
+          {pendingIndicator ? <div className="chat-strip__status">{pendingIndicator}</div> : null}
+          {errorMessage ? <div className="chat-strip__error">{errorMessage}</div> : null}
+        </div>
       </section>
 
       <form
