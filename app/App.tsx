@@ -15,7 +15,7 @@ import {
   transcribeAudio,
   type HermesSettings,
 } from './lib/hermes'
-import { AGENT_NAME, DEFAULT_VRM_NAME, VRM_ITEMS } from './appConfig'
+import { DEFAULT_VRM_NAME, VRM_ITEMS } from './appConfig'
 
 const VrmStage = lazy(async () => {
   const module = await import('./components/VrmStage')
@@ -43,20 +43,12 @@ type StoredSettings = HermesSettings & {
   ttsEnabled: boolean
 }
 
+type ConnectionState = 'idle' | 'connected' | 'failed'
+
 const SETTINGS_KEY = 'agentvrm.hermes.settings'
 
 function defaultBaseUrl(): string {
-  if (typeof window === 'undefined') {
-    return 'http://127.0.0.1:8642'
-  }
-
-  if (window.location.protocol === 'https:') {
-    return window.location.origin
-  }
-
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-  const hostname = window.location.hostname || '127.0.0.1'
-  return `${protocol}//${hostname}:8642`
+  return ''
 }
 
 function createClientId(): string {
@@ -181,7 +173,6 @@ function SettingsIcon() {
 }
 
 export function App() {
-  const agentName = AGENT_NAME
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings())
   const [messages, setMessages] = useState<UIMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -194,6 +185,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTestBusy, setSettingsTestBusy] = useState(false)
   const [settingsTestStatus, setSettingsTestStatus] = useState<string | null>(null)
+  const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
   const vrmItems = VRM_ITEMS as VrmItem[]
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -211,6 +203,7 @@ export function App() {
     [settings.selectedVrmName, vrmItems],
   )
   const visibleMessages = useMemo(() => messages.slice(-3), [messages])
+  const agentLabel = connectionState === 'connected' ? 'Assistant' : 'Hermes'
 
   const pendingIndicator = useMemo(() => {
     if (recordingState === 'hold') {
@@ -283,6 +276,7 @@ export function App() {
 
   const updateSetting = <K extends keyof StoredSettings>(key: K, value: StoredSettings[K]) => {
     setSettingsTestStatus(null)
+    setConnectionState('idle')
     setSettings((current) => ({ ...current, [key]: value }))
   }
 
@@ -332,13 +326,21 @@ export function App() {
       return
     }
 
+    if (!settings.baseUrl.trim()) {
+      setConnectionState('failed')
+      setSettingsTestStatus('Enter a Hermes URL first.')
+      return
+    }
+
     setSettingsTestBusy(true)
     setSettingsTestStatus('Testing…')
 
     try {
       const models = await probeHermes(settings)
+      setConnectionState('connected')
       setSettingsTestStatus(models.length > 0 ? `Connected. ${models.length} model${models.length === 1 ? '' : 's'}.` : 'Connected.')
     } catch (error) {
+      setConnectionState('failed')
       setSettingsTestStatus(formatError(error))
     } finally {
       setSettingsTestBusy(false)
@@ -399,6 +401,12 @@ export function App() {
       return
     }
 
+    if (!settings.baseUrl.trim()) {
+      setConnectionState('failed')
+      setErrorMessage('Enter a Hermes URL in Settings first.')
+      return
+    }
+
     const userMessage: UIMessage = {
       content: trimmed,
       id: createClientId(),
@@ -414,6 +422,7 @@ export function App() {
 
     try {
       const result = await createChatCompletion(settings, trimmed, '', sessionId)
+      setConnectionState('connected')
       const assistantMessage: UIMessage = {
         content: result.content || '(No response returned.)',
         id: createClientId(),
@@ -429,6 +438,7 @@ export function App() {
         void playSpeech(assistantMessage.content)
       }
     } catch (error) {
+      setConnectionState('failed')
       setErrorMessage(formatError(error))
     } finally {
       setBusy(false)
@@ -581,6 +591,8 @@ export function App() {
 
   const micActive = recordingState === 'hold' || recordingState === 'toggle'
   const micDisabled = !settings.sttEnabled || busy || recordingState === 'transcribing'
+  const emptyStateLabel =
+    connectionState === 'connected' ? 'Hermes is ready.' : 'Hermes not connected.'
 
   return (
     <main className="app-shell">
@@ -600,11 +612,11 @@ export function App() {
       <section className="chat-strip">
         <div className="chat-strip__gradient" />
         {visibleMessages.length === 0 ? (
-          <div className="chat-strip__empty">{agentName} is ready.</div>
+          <div className="chat-strip__empty">{emptyStateLabel}</div>
         ) : (
           visibleMessages.map((message) => (
             <article className={`chat-line chat-line--${message.role}`} key={message.id}>
-              <span className="chat-line__role">{message.role === 'user' ? 'You' : agentName}</span>
+              <span className="chat-line__role">{message.role === 'user' ? 'You' : agentLabel}</span>
               <p>{message.content}</p>
             </article>
           ))
@@ -657,7 +669,7 @@ export function App() {
         <input
           autoComplete="off"
           className="input-dock__field"
-          placeholder={`Message ${agentName}`}
+          placeholder="Message"
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}

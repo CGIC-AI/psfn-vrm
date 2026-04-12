@@ -1,4 +1,3 @@
-export const AGENT_NAME = 'thoth'
 export const DEFAULT_VRM_NAME = '4726325800792634159.vrm'
 
 export const VRM_ITEMS = [
