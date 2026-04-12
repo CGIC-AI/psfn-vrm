@@ -73,7 +73,6 @@ Files added for static hosting and installability:
 
 - `public/site.webmanifest`
 - `public/sw.js`
-- `public/_redirects`
 - `public/_headers`
 
 Target hostname:
