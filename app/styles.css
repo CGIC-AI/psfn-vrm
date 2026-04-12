@@ -125,8 +125,8 @@ button {
   left: 50%;
   bottom: 64px;
   z-index: 4;
-  width: min(720px, calc(100vw - 24px));
-  height: clamp(152px, 19vh, 220px);
+  width: min(860px, calc(100vw - 24px));
+  height: clamp(132px, 16vh, 180px);
   transform: translateX(-50%);
   pointer-events: none;
 }
@@ -391,7 +391,7 @@ button {
 
   .chat-strip {
     bottom: 60px;
-    height: clamp(132px, 23vh, 182px);
+    height: clamp(124px, 21vh, 170px);
     width: calc(100vw - 16px);
   }
 
