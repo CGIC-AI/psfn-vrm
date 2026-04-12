@@ -16,6 +16,12 @@ import {
   transcribeAudio,
   type HermesSettings,
 } from './lib/hermes'
+import {
+  getStoredVrm,
+  listStoredVrms,
+  saveStoredVrm,
+  type StoredVrmMeta,
+} from './lib/vrmLibrary'
 import { DEFAULT_VRM_NAME, VRM_ITEMS } from './appConfig'
 
 const VrmStage = lazy(async () => {
@@ -31,15 +37,17 @@ type UIMessage = {
 
 type InputMode = 'toggle' | 'ptt'
 type RecordingState = 'idle' | 'hold' | 'toggle' | 'transcribing'
-type VrmItem = {
+type LibraryVrmItem = {
+  id: string
   name: string
-  url: string
+  source: 'bundled' | 'uploaded'
+  url?: string
 }
 
 type StoredSettings = HermesSettings & {
   inputMode: InputMode
   pttKey: string
-  selectedVrmName: string
+  selectedVrmId: string
   sttEnabled: boolean
   ttsEnabled: boolean
 }
@@ -47,6 +55,13 @@ type StoredSettings = HermesSettings & {
 type ConnectionState = 'idle' | 'connected' | 'failed'
 
 const SETTINGS_KEY = 'agentvrm.hermes.settings'
+const DEFAULT_VRM_ID = `bundled:${DEFAULT_VRM_NAME}`
+const BUNDLED_VRM_ITEMS: LibraryVrmItem[] = VRM_ITEMS.map((item) => ({
+  id: `bundled:${item.name}`,
+  name: item.name,
+  source: 'bundled',
+  url: item.url,
+}))
 
 function defaultBaseUrl(): string {
   return ''
@@ -75,7 +90,7 @@ function loadSettings(): StoredSettings {
     inputMode: 'ptt',
     model: 'hermes-agent',
     pttKey: 'CapsLock',
-    selectedVrmName: DEFAULT_VRM_NAME,
+    selectedVrmId: DEFAULT_VRM_ID,
     sttEnabled: true,
     ttsEnabled: true,
   }
@@ -90,7 +105,9 @@ function loadSettings(): StoredSettings {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<StoredSettings>
+    const parsed = JSON.parse(raw) as Partial<StoredSettings> & {
+      selectedVrmName?: string
+    }
     const shouldUseSameOriginHttps =
       window.location.protocol === 'https:' &&
       parsed.baseUrl?.trim() === `${window.location.protocol}//${window.location.hostname}:8642`
@@ -105,7 +122,9 @@ function loadSettings(): StoredSettings {
       inputMode: parsed.inputMode === 'toggle' ? 'toggle' : fallback.inputMode,
       model: fallback.model,
       pttKey: parsed.pttKey?.trim() || fallback.pttKey,
-      selectedVrmName: parsed.selectedVrmName?.trim() || fallback.selectedVrmName,
+      selectedVrmId: normalizeStoredVrmId(
+        typeof parsed.selectedVrmId === 'string' ? parsed.selectedVrmId : parsed.selectedVrmName,
+      ) || fallback.selectedVrmId,
       sttEnabled: parsed.sttEnabled ?? fallback.sttEnabled,
       ttsEnabled: parsed.ttsEnabled ?? fallback.ttsEnabled,
     }
@@ -132,6 +151,50 @@ function pickRecorderMimeType(): string | undefined {
 
 function normalizeShortcut(shortcut: string): string {
   return shortcut.trim() || 'CapsLock'
+}
+
+function normalizeStoredVrmId(value: unknown): string {
+  if (typeof value !== 'string') {
+    return DEFAULT_VRM_ID
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return DEFAULT_VRM_ID
+  }
+  if (trimmed.startsWith('bundled:') || trimmed.startsWith('uploaded:')) {
+    return trimmed
+  }
+  return `bundled:${trimmed}`
+}
+
+function createUniqueVrmName(name: string, existingNames: Iterable<string>): string {
+  const taken = new Set(Array.from(existingNames, (item) => item.toLowerCase()))
+  const trimmed = name.trim() || 'avatar.vrm'
+  if (!taken.has(trimmed.toLowerCase())) {
+    return trimmed
+  }
+
+  const dotIndex = trimmed.lastIndexOf('.')
+  const hasExtension = dotIndex > 0
+  const base = hasExtension ? trimmed.slice(0, dotIndex) : trimmed
+  const extension = hasExtension ? trimmed.slice(dotIndex) : ''
+
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${base} (${index})${extension}`
+    if (!taken.has(candidate.toLowerCase())) {
+      return candidate
+    }
+  }
+
+  return `${base} (${Date.now()})${extension}`
+}
+
+function mapStoredMetaToLibraryItem(meta: StoredVrmMeta): LibraryVrmItem {
+  return {
+    id: meta.id,
+    name: meta.name,
+    source: 'uploaded',
+  }
 }
 
 function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
@@ -179,6 +242,7 @@ export function App() {
   const [draft, setDraft] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [activeVrmLabel, setActiveVrmLabel] = useState<string | null>(null)
+  const [uploadedVrms, setUploadedVrms] = useState<LibraryVrmItem[]>([])
   const [busy, setBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -188,7 +252,6 @@ export function App() {
   const [settingsTestBusy, setSettingsTestBusy] = useState(false)
   const [settingsTestStatus, setSettingsTestStatus] = useState<string | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle')
-  const vrmItems = VRM_ITEMS as VrmItem[]
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioBlobUrlRef = useRef<string | null>(null)
@@ -199,12 +262,16 @@ export function App() {
   const recorderChunksRef = useRef<Blob[]>([])
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const localVrmInputRef = useRef<HTMLInputElement | null>(null)
-  const localVrmUrlRef = useRef<string | null>(null)
+  const activeUploadedVrmUrlRef = useRef<string | null>(null)
   const pttShortcutActiveRef = useRef(false)
 
+  const vrmItems = useMemo(
+    () => [...BUNDLED_VRM_ITEMS, ...uploadedVrms],
+    [uploadedVrms],
+  )
   const selectedVrm = useMemo(
-    () => vrmItems.find((item) => item.name === settings.selectedVrmName) ?? null,
-    [settings.selectedVrmName, vrmItems],
+    () => vrmItems.find((item) => item.id === settings.selectedVrmId) ?? null,
+    [settings.selectedVrmId, vrmItems],
   )
   const visibleMessages = useMemo(() => messages.slice(-3), [messages])
   const agentLabel = connectionState === 'connected' ? 'Assistant' : 'Hermes'
@@ -264,9 +331,9 @@ export function App() {
       if (audioContextRef.current) {
         void audioContextRef.current.close()
       }
-      if (localVrmUrlRef.current) {
-        URL.revokeObjectURL(localVrmUrlRef.current)
-        localVrmUrlRef.current = null
+      if (activeUploadedVrmUrlRef.current) {
+        URL.revokeObjectURL(activeUploadedVrmUrlRef.current)
+        activeUploadedVrmUrlRef.current = null
       }
     }
   }, [])
@@ -284,28 +351,82 @@ export function App() {
 
   const updateSetting = <K extends keyof StoredSettings>(key: K, value: StoredSettings[K]) => {
     setSettingsTestStatus(null)
-    setConnectionState('idle')
+    if (key === 'apiKey' || key === 'baseUrl') {
+      setConnectionState('idle')
+    }
     setSettings((current) => ({ ...current, [key]: value }))
   }
 
   useEffect(() => {
+    let cancelled = false
+
+    const loadUploadedVrms = async () => {
+      try {
+        const records = await listStoredVrms()
+        if (cancelled) {
+          return
+        }
+        setUploadedVrms(records.map(mapStoredMetaToLibraryItem))
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(formatError(error))
+        }
+      }
+    }
+
+    void loadUploadedVrms()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const setActiveAvatar = useEffectEvent(async (item: LibraryVrmItem) => {
+    if (activeUploadedVrmUrlRef.current) {
+      URL.revokeObjectURL(activeUploadedVrmUrlRef.current)
+      activeUploadedVrmUrlRef.current = null
+    }
+
+    if (item.source === 'bundled') {
+      setAvatarUrl(item.url ?? null)
+      setActiveVrmLabel(item.name)
+      setErrorMessage(null)
+      return
+    }
+
+    const record = await getStoredVrm(item.id)
+    if (!record) {
+      setUploadedVrms((current) => current.filter((entry) => entry.id !== item.id))
+      throw new Error(`Stored VRM "${item.name}" is missing.`)
+    }
+
+    const objectUrl = URL.createObjectURL(record.file)
+    activeUploadedVrmUrlRef.current = objectUrl
+    setAvatarUrl(objectUrl)
+    setActiveVrmLabel(record.name)
+    setErrorMessage(null)
+  })
+
+  useEffect(() => {
     const fallback = vrmItems[0] ?? null
-    if (!selectedVrm && fallback && fallback.name !== settings.selectedVrmName) {
-      setSettings((current) => ({ ...current, selectedVrmName: fallback.name }))
+    if (!selectedVrm && fallback && fallback.id !== settings.selectedVrmId) {
+      setSettings((current) => ({ ...current, selectedVrmId: fallback.id }))
       return
     }
     if (!selectedVrm && !fallback) {
-      setErrorMessage('No bundled VRMs found.')
+      setErrorMessage('No VRMs available.')
       return
     }
     if (!avatarUrl) {
       const initialVrm = selectedVrm ?? fallback
-      if (initialVrm) {
-        setAvatarUrl(initialVrm.url)
-        setActiveVrmLabel(initialVrm.name)
+      if (!initialVrm) {
+        return
       }
+      void setActiveAvatar(initialVrm).catch((error: unknown) => {
+        setErrorMessage(formatError(error))
+      })
     }
-  }, [avatarUrl, selectedVrm, settings.selectedVrmName, vrmItems])
+  }, [avatarUrl, selectedVrm, settings.selectedVrmId, setActiveAvatar, vrmItems])
 
   const ensureAudioPipeline = useEffectEvent(async () => {
     const audio = audioRef.current
@@ -590,18 +711,12 @@ export function App() {
     }
   }, [settings.inputMode, settings.pttKey, settings.sttEnabled, startRecording, stopRecording])
 
-  const loadSelectedVrm = useEffectEvent(() => {
+  const loadSelectedVrm = useEffectEvent(async () => {
     if (!selectedVrm) {
       setErrorMessage('No VRM is available to load.')
       return
     }
-    if (localVrmUrlRef.current) {
-      URL.revokeObjectURL(localVrmUrlRef.current)
-      localVrmUrlRef.current = null
-    }
-    setAvatarUrl(selectedVrm.url)
-    setActiveVrmLabel(selectedVrm.name)
-    setErrorMessage(null)
+    await setActiveAvatar(selectedVrm)
     setSettingsOpen(false)
   })
 
@@ -609,7 +724,7 @@ export function App() {
     localVrmInputRef.current?.click()
   })
 
-  const loadLocalVrm = useEffectEvent((event: ChangeEvent<HTMLInputElement>) => {
+  const loadLocalVrm = useEffectEvent(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
 
@@ -622,16 +737,27 @@ export function App() {
       return
     }
 
-    if (localVrmUrlRef.current) {
-      URL.revokeObjectURL(localVrmUrlRef.current)
+    const nextName = createUniqueVrmName(file.name, vrmItems.map((item) => item.name))
+    const nextItem: LibraryVrmItem = {
+      id: `uploaded:${createClientId()}`,
+      name: nextName,
+      source: 'uploaded',
     }
 
-    const objectUrl = URL.createObjectURL(file)
-    localVrmUrlRef.current = objectUrl
-    setAvatarUrl(objectUrl)
-    setActiveVrmLabel(file.name)
-    setErrorMessage(null)
-    setSettingsOpen(false)
+    try {
+      await saveStoredVrm({
+        file,
+        id: nextItem.id,
+        name: nextName,
+        updatedAt: Date.now(),
+      })
+      setUploadedVrms((current) => [...current, nextItem].sort((left, right) => left.name.localeCompare(right.name)))
+      setSettings((current) => ({ ...current, selectedVrmId: nextItem.id }))
+      await setActiveAvatar(nextItem)
+      setSettingsOpen(false)
+    } catch (error) {
+      setErrorMessage(formatError(error))
+    }
   })
 
   const micActive = recordingState === 'hold' || recordingState === 'toggle'
@@ -788,14 +914,14 @@ export function App() {
             <label className="field">
               <span>VRM</span>
               <select
-                value={settings.selectedVrmName}
-                onChange={(event) => updateSetting('selectedVrmName', event.target.value)}
+                value={settings.selectedVrmId}
+                onChange={(event) => updateSetting('selectedVrmId', event.target.value)}
               >
                 {vrmItems.length === 0 ? (
-                  <option value="">No bundled VRMs found</option>
+                  <option value="">No VRMs found</option>
                 ) : (
                   vrmItems.map((item) => (
-                    <option key={item.name} value={item.name}>
+                    <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
                   ))
@@ -807,7 +933,7 @@ export function App() {
               <button
                 className="text-button text-button--primary"
                 disabled={!selectedVrm}
-                onClick={() => loadSelectedVrm()}
+                onClick={() => void loadSelectedVrm()}
                 type="button"
               >
                 Load Selected
@@ -823,7 +949,7 @@ export function App() {
             <input
               accept=".vrm"
               className="hidden-file-input"
-              onChange={loadLocalVrm}
+              onChange={(event) => void loadLocalVrm(event)}
               ref={localVrmInputRef}
               type="file"
             />
