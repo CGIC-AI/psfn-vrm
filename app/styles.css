@@ -1,0 +1,372 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  color: #f5f5f5;
+  font-family: 'IBM Plex Mono', monospace;
+  color-scheme: dark;
+  background: #020202;
+  --bg: rgba(0, 0, 0, 0.82);
+  --bg-soft: rgba(0, 0, 0, 0.56);
+  --line: rgba(255, 255, 255, 0.2);
+  --line-strong: rgba(255, 255, 255, 0.42);
+  --text-dim: rgba(255, 255, 255, 0.62);
+  --danger: #ff8f8f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+input,
+select,
+button {
+  border-radius: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.vrm-stage {
+  position: absolute;
+  inset: 0;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.08), transparent 20%),
+    linear-gradient(180deg, rgba(10, 10, 10, 0.12), rgba(0, 0, 0, 0));
+}
+
+.vrm-stage__backdrop,
+.vrm-stage__viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.vrm-stage__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.vrm-stage--loading::after,
+.vrm-stage__status {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.vrm-stage--loading::after {
+  content: 'Loading viewer';
+}
+
+.vrm-stage__status {
+  right: auto;
+}
+
+.settings-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.settings-button svg,
+.icon-button svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.chat-strip {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  width: min(860px, calc(100vw - 24px));
+  height: 25vh;
+  min-height: 150px;
+  transform: translateX(-50%);
+  padding: 28px 10px 12px;
+  pointer-events: none;
+}
+
+.chat-strip__gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.45) 42%, rgba(0, 0, 0, 0.92) 100%);
+}
+
+.chat-strip__empty,
+.chat-strip__status,
+.chat-strip__error,
+.chat-line {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-strip__empty,
+.chat-strip__status,
+.chat-strip__error {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.chat-strip__error {
+  color: var(--danger);
+}
+
+.chat-line {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+  color: #fff;
+}
+
+.chat-line__role {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.chat-line p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+}
+
+.chat-line--user p {
+  color: #d7d7d7;
+}
+
+.input-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  width: min(860px, calc(100vw - 24px));
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.86);
+  border: 1px solid var(--line-strong);
+}
+
+.input-dock__field,
+.icon-button,
+.settings-modal input,
+.settings-modal select {
+  min-height: 40px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: #fff;
+  outline: none;
+}
+
+.input-dock__field {
+  padding: 0 10px;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.02);
+  color: #fff;
+}
+
+.icon-button:last-child {
+  border-right: 0;
+}
+
+.icon-button.is-active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.icon-button:disabled,
+.settings-button:disabled,
+.text-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.settings-modal {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--line-strong);
+}
+
+.settings-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-modal__header h2 {
+  margin: 0;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field span,
+.check-row span {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.settings-modal input,
+.settings-modal select {
+  width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+}
+
+.settings-modal select,
+.settings-modal select option {
+  background: #050505;
+  color: #fff;
+}
+
+.settings-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-status {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+}
+
+.check-row input {
+  margin: 0;
+}
+
+.text-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.text-button--primary {
+  border-color: var(--line-strong);
+}
+
+@media (max-width: 720px) {
+  .settings-button span {
+    display: none;
+  }
+
+  .chat-strip {
+    bottom: 60px;
+    height: 26vh;
+    min-height: 132px;
+    width: calc(100vw - 16px);
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .input-dock {
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+
+  .chat-line p {
+    font-size: 13px;
+  }
+
+  .settings-modal {
+    top: 8px;
+    right: 8px;
+    width: calc(100vw - 16px);
+  }
+}
